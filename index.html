@@ -1,0 +1,65 @@
+const SUPABASE_URL = "https://sdxjoqothwnbucjxjdhu.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNkeGpvcW90aHduYnVjanhqZGh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAyODUzMjYsImV4cCI6MjEwNTg2MTMyNn0.J2n6I3d8G3uEWvuR-NBInuc89_hlJNRsBI9EZK1xZT8";
+
+function syncToSupabase(e) {
+  // Hanya berjalan pada pemicu Edit / Append Row dari AppSheet
+  if (!e || !e.range) return;
+  
+  const sheet = e.source.getActiveSheet();
+  const row = e.range.getRow();
+  
+  // Lewati header row
+  if (row === 1) return;
+  
+  const data = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  
+  // Sesuaikan urutan kolom sesuai Google Sheet Anda
+  // Contoh kolom: A: Nama, B: Alamat, C: Lat, D: Long, E: Status, F: Sales, G: Zona, H: Catatan
+  const payload = {
+    nama_pelanggan: data[0],
+    alamat: data[1],
+    latitude: parseFloat(data[2]),
+    longitude: parseFloat(data[3]),
+    status_minat: parseStatusMinat(data[4]),
+    sales_name: data[5],
+    zona_area: data[6],
+    catatan: data[7] || ''
+  };
+
+  const options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + SUPABASE_KEY,
+      "Prefer": "return=minimal"
+    },
+    payload: JSON.stringify(payload)
+  };
+
+  try {
+    UrlFetchApp.fetch(SUPABASE_URL + "/rest/v1/pelanggan", options);
+    Logger.log("Data berhasil dikirim ke Supabase: " + payload.nama_pelanggan);
+  } catch (error) {
+    Logger.log("Error sync ke Supabase: " + error.toString());
+  }
+}
+
+// Normalisasi input string status dari AppSheet
+function parseStatusMinat(val) {
+  if (!val) return 'diluar_jaringan';
+  const str = val.toString().toLowerCase().trim();
+  if (str.includes('minat') && !str.includes('tidak')) return 'minat';
+  if (str.includes('timbang') || str.includes('ragu')) return 'pertimbangan';
+  if (str.includes('tidak')) return 'tidak_minat';
+  return 'diluar_jaringan';
+}
+
+// Pasang Trigger otomatis setiap perubahan data
+function setupTrigger() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet();
+  ScriptApp.newTrigger('syncToSupabase')
+    .forSpreadsheet(sheet)
+    .onFormSubmit() // atau .onChange() jika AppSheet langsung update spreadsheet
+    .create();
+}
